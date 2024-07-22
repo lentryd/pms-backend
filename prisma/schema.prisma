@@ -1,0 +1,113 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  /// The unique identifier of the user
+  id       String    @id @default(uuid())
+  /// The name of the user
+  name     String?
+  /// The email of the user
+  email    String    @unique
+  /// The hashed password of the user
+  password String
+  /// The projects that the user owns
+  projects Project[] @relation("ProjectOwner")
+  /// The projects that the user is a member of
+  memberOf Project[] @relation("ProjectMembers")
+}
+
+model Project {
+  /// The unique identifier of the project
+  id          String  @id @default(uuid())
+  /// The name of the project
+  name        String
+  /// The description of the project
+  description String?
+
+  /// The start date of the project
+  startDate DateTime
+  /// The end date of the project
+  endDate   DateTime
+
+  /// The date the project was created
+  createdAt DateTime @default(now())
+  /// The date the project was last updated
+  updatedAt DateTime @updatedAt
+
+  /// The user that created the project
+  owner   User   @relation("ProjectOwner", fields: [ownerId], references: [id])
+  ownerId String
+  /// The users that are members of the project
+  members User[] @relation("ProjectMembers")
+
+  /// The stages that belong to the project
+  stages Stage[] @relation("ProjectStages")
+  /// The tasks that belong to the project
+  tasks  Task[]  @relation("ProjectTasks")
+}
+
+model Stage {
+  /// The unique identifier of the stage
+  id          String  @id @default(uuid())
+  /// The name of the stage
+  name        String
+  /// The description of the stage
+  description String?
+
+  /// The start date of the stage
+  startDate DateTime
+  /// The end date of the stage
+  endDate   DateTime
+
+  /// The date the stage was created
+  createdAt DateTime @default(now())
+  /// The date the stage was last updated
+  updatedAt DateTime @updatedAt
+
+  /// The tasks that belong to the stage
+  tasks Task[] @relation("StageTasks")
+
+  /// The project that the stage belongs to
+  project   Project @relation("ProjectStages", fields: [projectId], references: [id])
+  projectId String
+}
+
+model Task {
+  /// The unique identifier of the task
+  id          String  @id @default(uuid())
+  /// The name of the task
+  name        String
+  /// The description of the task
+  description String?
+
+  /// The start date of the task
+  startDate DateTime
+  /// The end date of the task
+  endDate   DateTime
+
+  /// The date the task was created
+  createdAt DateTime @default(now())
+  /// The date the task was last updated
+  updatedAt DateTime @updatedAt
+
+  /// The index of the task in the stage
+  indexAtStage Int
+  /// The stage that the task belongs to
+  stage        Stage   @relation("StageTasks", fields: [stageId], references: [id])
+  stageId      String
+  /// The project that the task belongs to
+  project      Project @relation("ProjectTasks", fields: [projectId], references: [id])
+  projectId    String
+}
