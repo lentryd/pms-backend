@@ -111,13 +111,40 @@ export class ProjectsService {
       throw new BadRequestException('You are not the owner of this project');
     }
 
+    // Delete all stages and tasks of the project
+    await this.prisma.$transaction(async (prisma) => {
+      // Find all tasks that are linked to the project
+      const tasks = await prisma.task.findMany({
+        where: { projectId: id },
+      });
+      // Delete all tasks
+      await prisma.task.deleteMany({
+        where: { projectId: id },
+      });
+
+      // Find all stages that are linked to the tasks
+      const stages = await prisma.stage.findMany({
+        where: { projectId: id },
+      });
+      // Delete all stages
+      await prisma.stage.deleteMany({
+        where: { projectId: id },
+      });
+
+      // Send event for all stages and tasks
+      this.eventsService.sendEventMany(EventType.TaskDeleted, tasks);
+      this.eventsService.sendEventMany(EventType.StageDeleted, stages);
+    });
+
     // Delete project and send event
     await this.prisma.project.delete({
       where: { id },
+      include: { stages: true, tasks: true },
     });
     this.eventsService.sendEvent(EventType.ProjectDeleted, project);
 
-    return;
+    // Return the deleted project
+    return project;
   }
 
   /**

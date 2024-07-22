@@ -237,6 +237,22 @@ export class TasksService {
     await this.prisma.task.delete({ where: { id } });
     this.eventsService.sendEvent(EventType.TaskDeleted, task);
 
-    return;
+    // Update task indexes
+    await this.prisma.task.updateMany({
+      where: {
+        stageId: task.stageId,
+        indexAtStage: { gt: task.indexAtStage },
+      },
+      data: { indexAtStage: { decrement: 1 } },
+    });
+
+    // Update tasks and send events
+    const updatedTasks = await this.prisma.task.findMany({
+      where: { stageId: task.stageId },
+    });
+    this.eventsService.sendEventMany(EventType.TaskUpdated, updatedTasks);
+
+    // Return the deleted task
+    return task;
   }
 }

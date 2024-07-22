@@ -110,10 +110,28 @@ export class StagesService {
       throw new BadRequestException('Stage not found');
     }
 
-    // Delete stage and send event
-    await this.prisma.stage.delete({ where: { id } });
+    // Find all tasks that are linked to the stage
+    const deletedTasks = await this.prisma.task.findMany({
+      where: { stageId: id },
+    });
+
+    await this.prisma.$transaction(async (prisma) => {
+      // Delete all tasks that are linked to the stage
+      await prisma.task.deleteMany({
+        where: { stageId: id },
+      });
+
+      // Send events for all deleted tasks
+      this.eventsService.sendEventMany(EventType.TaskDeleted, deletedTasks);
+    });
+
+    // Delete stages and send event
+    await this.prisma.stage.delete({
+      where: { id },
+    });
     this.eventsService.sendEvent(EventType.StageDeleted, stage);
 
-    return;
+    // Return the deleted stage
+    return stage;
   }
 }
