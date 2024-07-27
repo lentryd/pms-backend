@@ -122,7 +122,7 @@ export class StagesService {
       });
 
       // Send events for all deleted tasks
-      this.eventsService.sendEventMany(EventType.TaskDeleted, deletedTasks);
+      this.eventsService.sendEvent(EventType.TaskDeleted, deletedTasks);
     });
 
     // Delete stages and send event

@@ -1,134 +1,109 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Post,
-  Put,
-  Request,
-  UseGuards,
-} from '@nestjs/common';
+// Libraries
 import { OmitType } from '@nestjs/mapped-types';
-import { AuthGuard } from '../auth/auth.guard';
-
-import { ProjectsService } from './projects.service';
-import BaseProjectDto, {
-  CreateProjectDto,
-  UpdateProjectDto,
-  AddMemberDto,
-} from './projects.dto';
-
-import { StagesService } from '../integrate/stages/stages.service';
-import BaseStageDto, { UpdateStageDto } from '../integrate/stages/stage.dto';
-class CreateStageDto extends OmitType(BaseStageDto, ['projectId']) {}
-
+import { UseGuards, Controller } from '@nestjs/common';
+import { Get, Put, Post, Delete, Body, Param } from '@nestjs/common';
+// Guards
+import { MemberGuard } from '../guards/member.guard';
+// Decorators
+import { CurrentUser } from '../decorators/current-user.decorator';
+import { OnlyOwner, OnlyMember } from '../decorators/member.decorator';
+// Services
 import { TasksService } from '../integrate/tasks/tasks.service';
+import { StagesService } from '../integrate/stages/stages.service';
+import { MembersService } from '../integrate/members/members.service';
+import { ProjectsService } from './projects.service';
+// DTOs
+import BaseMemberDto from '../integrate/members/members.dto';
 import BaseTaskDto, { UpdateTaskDto } from '../integrate/tasks/task.dto';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import BaseUserDto from 'src/users/users.dto';
-class CreateTaskDto extends OmitType(BaseTaskDto, ['projectId']) {}
+import BaseStageDto, { UpdateStageDto } from '../integrate/stages/stage.dto';
+import BaseProjectDto, { UpdateProjectDto } from './projects.dto';
+// Helper functions
+import { addUserRole } from '../helpers/user-role.helper';
 
-@ApiTags('projects')
+// DTOs for creating tasks, stages and projects
+class AddMemberDto extends OmitType(BaseMemberDto, ['projectId']) {}
+class CreateTaskDto extends OmitType(BaseTaskDto, ['projectId']) {}
+class CreateStageDto extends OmitType(BaseStageDto, ['projectId']) {}
+class CreateProjectDto extends OmitType(BaseProjectDto, ['ownerId']) {}
+
+@UseGuards(MemberGuard)
 @Controller('projects')
 export class ProjectsController {
   constructor(
     private readonly tasksService: TasksService,
     private readonly stagesService: StagesService,
+    private readonly membersService: MembersService,
     private readonly projectsService: ProjectsService,
   ) {}
 
+  // Endpoints to find all projects or a single project by ID
+
   @Get()
-  @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Find all projects' })
-  @ApiResponse({
-    status: 200,
-    description: 'All projects',
-    type: [BaseProjectDto],
-  })
-  async findAll() {
-    return this.projectsService.findAll();
+  async findAll(@CurrentUser() userId: string) {
+    // Find all projects
+    const projects = await this.projectsService.findAll();
+
+    return addUserRole(projects, userId);
   }
 
   @Get(':id')
-  @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Find a project by ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'The project',
-    type: BaseProjectDto,
-  })
-  async findOne(@Param('id') id: string) {
-    return this.projectsService.findOne(id);
+  async findOne(@Param('id') id: string, @CurrentUser() userId: string) {
+    // Find the project by ID
+    const project = await this.projectsService.findOne(id);
+
+    return addUserRole(project, userId);
   }
 
+  // Endpoints to create, update, and delete a project
+
   @Post()
-  @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Create a project' })
-  @ApiResponse({
-    status: 201,
-    description: 'The project has been successfully created.',
-    type: BaseProjectDto,
-  })
-  async create(@Body() data: CreateProjectDto, @Request() req) {
-    return this.projectsService.create({ ...data, ownerId: req.user.id });
+  async create(@Body() data: CreateProjectDto, @CurrentUser() userId: string) {
+    // Create the project
+    const project = await this.projectsService.create({
+      ...data,
+      ownerId: userId,
+    });
+
+    return addUserRole(project, userId);
   }
 
   @Put(':id')
-  @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Update a project' })
-  @ApiResponse({
-    status: 200,
-    description: 'The project has been successfully updated.',
-    type: BaseProjectDto,
-  })
-  async update(@Param('id') id: string, @Body() data: UpdateProjectDto) {
-    return this.projectsService.update(id, data);
+  @OnlyOwner()
+  async update(
+    @Param('id') id: string,
+    @Body() data: UpdateProjectDto,
+    @CurrentUser() userId: string,
+  ) {
+    // Update the project
+    const project = await this.projectsService.update(id, data);
+
+    return addUserRole(project, userId);
   }
 
   @Delete(':id')
-  @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Delete a project' })
-  @ApiResponse({
-    status: 200,
-    description: 'The project has been successfully deleted.',
-  })
-  async delete(@Param('id') id: string, @Request() req) {
-    return this.projectsService.delete(id, req.user.id);
+  @OnlyOwner()
+  async delete(@Param('id') id: string, @CurrentUser() userId: string) {
+    // Delete the project
+    const project = await this.projectsService.delete(id);
+
+    return addUserRole(project, userId);
   }
 
+  // Endpoints to find, create, update, and delete tasks
+
   @Get(':id/tasks')
-  @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Find all tasks of a project' })
-  @ApiResponse({
-    status: 200,
-    description: 'All tasks of the project',
-    type: [BaseTaskDto],
-  })
   async findTasks(@Param('id') id: string) {
     return this.tasksService.findByProjectId(id);
   }
 
   @Post(':id/tasks')
-  @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Create a task for a project' })
-  @ApiResponse({
-    status: 201,
-    description: 'The task has been successfully created.',
-    type: BaseTaskDto,
-  })
+  @OnlyMember()
   async createTask(@Param('id') id: string, @Body() data: CreateTaskDto) {
     return this.tasksService.create({ ...data, projectId: id });
   }
 
   @Put(':id/tasks/:taskId')
-  @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Update a task of a project' })
-  @ApiResponse({
-    status: 200,
-    description: 'The task has been successfully updated.',
-    type: BaseTaskDto,
-  })
+  @OnlyMember()
   async updateTask(
     @Param('taskId') taskId: string,
     @Body() data: UpdateTaskDto,
@@ -137,48 +112,26 @@ export class ProjectsController {
   }
 
   @Delete(':id/tasks/:taskId')
-  @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Delete a task of a project' })
-  @ApiResponse({
-    status: 200,
-    description: 'The task has been successfully deleted.',
-  })
+  @OnlyMember()
   async removeTask(@Param('taskId') taskId: string) {
     return this.tasksService.delete(taskId);
   }
 
+  // Endpoints to find, create, update, and delete stages
+
   @Get(':id/stages')
-  @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Find all stages of a project' })
-  @ApiResponse({
-    status: 200,
-    description: 'All stages of the project',
-    type: [BaseStageDto],
-  })
   async findStages(@Param('id') id: string) {
     return this.stagesService.findByProjectId(id);
   }
 
   @Post(':id/stages')
-  @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Create a stage for a project' })
-  @ApiResponse({
-    status: 201,
-    description: 'The stage has been successfully created.',
-    type: BaseStageDto,
-  })
+  @OnlyMember()
   async createStage(@Param('id') id: string, @Body() data: CreateStageDto) {
     return this.stagesService.create({ ...data, projectId: id });
   }
 
   @Put(':id/stages/:stageId')
-  @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Update a stage of a project' })
-  @ApiResponse({
-    status: 200,
-    description: 'The stage has been successfully updated.',
-    type: BaseStageDto,
-  })
+  @OnlyMember()
   async updateStage(
     @Param('stageId') stageId: string,
     @Body() data: UpdateStageDto,
@@ -187,51 +140,36 @@ export class ProjectsController {
   }
 
   @Delete(':id/stages/:stageId')
-  @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Delete a stage of a project' })
-  @ApiResponse({
-    status: 200,
-    description: 'The stage has been successfully deleted.',
-  })
+  @OnlyMember()
   async removeStage(@Param('stageId') stageId: string) {
     return this.stagesService.delete(stageId);
   }
 
+  // Endpoints to find, add, and remove members from a project
+
   @Get(':id/members')
-  @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Find all members of a project' })
-  @ApiResponse({
-    status: 200,
-    description: 'All members of the project',
-    type: [BaseUserDto],
-  })
   async findMembers(@Param('id') id: string) {
-    return this.projectsService.findMembers(id);
+    // Find all members of the project
+    const members = await this.membersService.findByProjectId(id);
+
+    // Add the project ID to each member
+    return members.map((member) => ({ ...member, projectId: id }));
   }
 
   @Post(':id/members')
-  @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Add a member to a project' })
-  @ApiResponse({
-    status: 201,
-    description: 'The member has been successfully added.',
-    type: BaseUserDto,
-  })
+  @OnlyOwner()
   async addMember(@Param('id') id: string, @Body() data: AddMemberDto) {
-    return this.projectsService.addMember(id, data.id);
+    // Add the member to the project
+    return this.membersService.add({ ...data, projectId: id });
   }
 
   @Delete(':id/members/:memberId')
-  @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Remove a member from a project' })
-  @ApiResponse({
-    status: 200,
-    description: 'The member has been successfully removed.',
-  })
+  @OnlyOwner()
   async removeMember(
     @Param('id') id: string,
-    @Param('memberId') memberId: string,
+    @Param('memberId') userId: string,
   ) {
-    return this.projectsService.removeMember(id, memberId);
+    // Remove the member from the project
+    return this.membersService.del({ projectId: id, userId });
   }
 }

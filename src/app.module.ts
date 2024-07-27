@@ -8,6 +8,8 @@ import { EventsModule } from './events/events.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProjectsModule } from './projects/projects.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
+import { AuthGuard } from './guards/auth.guard';
+import { APP_GUARD } from '@nestjs/core';
 
 const staticModule = process.env.CLIENT_DIR
   ? [
@@ -36,7 +38,7 @@ const staticModule = process.env.CLIENT_DIR
     }),
     ...staticModule,
   ],
-  providers: [],
+  providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
   controllers: [],
 })
 export class AppModule {}
