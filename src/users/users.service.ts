@@ -100,8 +100,6 @@ export class UsersService {
 
     // Delete the user
     await this.prisma.user.delete({ where: { id } });
-
-    // Return 
     const { password, ...safeUser } = user;
     return safeUser;
   }
